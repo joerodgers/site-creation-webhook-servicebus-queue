@@ -188,7 +188,6 @@ function New-ArmTemplateParameterFile
     {
     }
 }
-
 function Set-DefaultParameterFileValue
 {
     [CmdletBinding()]
