@@ -70,7 +70,7 @@ resource service_bus_subscription_sitepagepublishing 'Microsoft.ServiceBus/names
   parent: service_bus_topic
 
   resource service_bus_subscription_rule_sitepagepublishing 'rules@2021-11-01' = {
-    name: 'SITEPAGEPUBLISHING'
+    name: 'TEMPLATE-FILTER'
     properties: {
       filterType: 'CorrelationFilter'
       correlationFilter: {
@@ -78,7 +78,6 @@ resource service_bus_subscription_sitepagepublishing 'Microsoft.ServiceBus/names
       }
     }
   }
-  
 }
 
 resource service_bus_subscription_group 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2021-11-01' = {
@@ -101,11 +100,27 @@ resource service_bus_subscription_sts 'Microsoft.ServiceBus/namespaces/topics/su
   parent: service_bus_topic
 
   resource service_bus_subscription_rule_sts 'rules@2021-11-01' = {
-    name: 'STS'
+    name: 'TEMPLATE-FILTER'
     properties: {
       filterType: 'CorrelationFilter'
       correlationFilter: {
         label: 'STS'
+      }
+    }
+  }
+}
+
+resource service_bus_subscription_disable_sharing_non_owners 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2021-11-01' = {
+  name: 'disable-sharing-for-non-owners'
+  parent: service_bus_topic
+
+  resource service_bus_subscription_rule_sts 'rules@2021-11-01' = {
+    name: 'TEMPLATE-FILTER'
+    properties: {
+      filterType: 'SqlFilter'
+      sqlFilter: {
+        sqlExpression: 'sys.label in ( \'GROUP\', \'STS\', \'SITEPAGEPUBLISHING\' )'
+        compatibilityLevel: 20
       }
     }
   }
@@ -146,8 +161,12 @@ resource logic_app 'Microsoft.Logic/workflows@2019-05-01' = {
                   properties: {
                     template: {
                       type: 'string'
+                      minLength: 3
                     }
                   }
+                  required: [
+                    'template'
+                  ]
                 }
                 webDescription: {
                   type: 'string'
@@ -157,32 +176,87 @@ resource logic_app 'Microsoft.Logic/workflows@2019-05-01' = {
                 }
                 webUrl: {
                   type: 'string'
+                  minLength: 25
                 }
               }
+              required: [
+                'webUrl'
+              ]
             }
           }
         }
       }
       actions: {
-        'Send_message': {
-          type: 'ApiConnection'
-          inputs: {
-            body:{
-              ContentType : 'application/json'
-              ContentData: '@{base64(concat(\'{   "webUrl" : "\', triggerBody()?[\'webUrl\'], \'", "webTitle" : "\', triggerBody()?[\'webTitle\'], \'", "webDescription" : "\', triggerBody()?[\'webDescription\'], \'", "creatorName" : "\', triggerBody()?[\'creatorName\'], \'", "creatorEmail" : "\', triggerBody()?[\'creatorEmail\'], \'", "createdTimeUTC" : "\', triggerBody()?[\'createdTimeUTC\'], \'", "groupId" : "\', triggerBody()?[\'groupId\'], \'", }\'))}'
-              Label: '@triggerBody()?[\'parameters\']?[\'template\']'
-            }
-            host: {
-              connection: {
-                Name: '@parameters(\'$connections\')[\'servicebus\'][\'connectionId\']'
+        Input_validation: {
+          actions: {
+            'Send_message': {
+              type: 'ApiConnection'
+              description: 'Submit message details to Azure Service Bus Topic'
+              inputs: {
+                body: {
+                  ContentType: 'application/json'
+                  ContentData: '@{base64(concat(\'{   "webUrl" : "\', triggerBody()?[\'webUrl\'], \'", "webTitle" : "\', triggerBody()?[\'webTitle\'], \'", "webDescription" : "\', triggerBody()?[\'webDescription\'], \'", "creatorName" : "\', triggerBody()?[\'creatorName\'], \'", "creatorEmail" : "\', triggerBody()?[\'creatorEmail\'], \'", "createdTimeUTC" : "\', triggerBody()?[\'createdTimeUTC\'], \'", "groupId" : "\', triggerBody()?[\'groupId\'], \'", }\'))}'
+                  Label: '@{toUpper(triggerBody()?[\'parameters\']?[\'template\'])}'
+                }
+                host: {
+                  connection: {
+                    Name: '@parameters(\'$connections\')[\'servicebus\'][\'connectionId\']'
+                  }
+                }
+                method: 'post'
+                path: '/@{encodeURIComponent(encodeURIComponent(\'${service_bus_topic.name}\'))}/messages'
+                queries: {
+                  systemProperties: 'None'
+                }
               }
             }
-            method: 'post'
-            path: '/@{encodeURIComponent(encodeURIComponent(\'${service_bus_topic.name}\'))}/messages'
-            queries: {
-              systemProperties: 'None'
+          }
+          description: 'Returns TRUE if Template and WebUrl are not empty strings'
+          else: {
+            actions: {
+              Terminate: {
+                description: 'Either Template or WebUrl was empty'
+                inputs: {
+                  runError: {
+                    message: 'Failed due to invalide Template or WebUrl input value.'
+                  }
+                  runStatus: 'Failed'
+                }
+                runAfter: {}
+                type: 'Terminate'
+              }
             }
           }
+          expression: {
+            and: [
+              {
+                not: {
+                  equals: [
+                    '@empty(coalesce(triggerBody()[\'webUrl\'],\'\'))'
+                    '@true'
+                  ]
+                }
+              }
+              {
+                not: {
+                  equals: [
+                    '@empty(coalesce(triggerBody()?[\'parameters\'],\'\'))'
+                    '@true'
+                  ]
+                }
+              }
+              {
+                not: {
+                  equals: [
+                    '@empty(coalesce(triggerBody()?[\'parameters\']?[\'template\'],\'\'))'
+                    '@true'
+                  ]
+                }
+              }
+            ]
+          }
+          runAfter: {}
+          type: 'If'
         }
       }
     }

@@ -24,19 +24,23 @@ param
     $Location = "eastus"
 )
 
-Import-Module -Name "$PSScriptRoot\resources\resources.psm1" -Force -ErrorAction Stop
-
 [System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials 
 [System.Net.ServicePointManager]::SecurityProtocol   = [System.Net.SecurityProtocolType]::Tls12   
 
 $ctx = Get-AzContext
 
-if( ($ctx.Tenant.Id -ne $TenantId.ToString() -or $ctx.Subscription.SubscriptionId -ne $SubscriptionId.ToString()) )
+if( $ctx.Tenant.Id -ne $TenantId.ToString() -or $ctx.Subscription.SubscriptionId -ne $SubscriptionId.ToString() )
 {
+    Write-Host "[$(Get-Date)] - Prompting for Azure credentials"
     Login-AzAccount -Tenant $TenantId -WarningAction SilentlyContinue
+
+    $ctx = Get-AzContext
 }
 
-$null = Select-AzSubscription -Subscription $env:MSFT_SUBSCRIPTIONID -WarningAction SilentlyContinue | Out-Null
+$subscription = Select-AzSubscription -Subscription $SubscriptionId -WarningAction SilentlyContinue
+
+Write-Host "[$(Get-Date)] - Connected as: $($ctx.Account.Id)"
+Write-Host "[$(Get-Date)] - Subscription: $($subscription.Subscription.Name)"
 
 $templatePath  = Join-Path -Path $PSScriptRoot -ChildPath "resources\azure-deploy.bicep"
 $parameterPath = Join-Path -Path $PSScriptRoot -ChildPath "resources\azure-deploy-parameters.$($Environment.ToLower()).json"
@@ -58,6 +62,7 @@ if( -not (Test-Path -Path $parameterPath -PathType Leaf) )
     if( -not (Get-AzResourceGroup -Name $ResourceGroupName -ErrorAction SilentlyContinue) )
     {
         Write-Host "[$(Get-Date)] - Provisioning Resource Group: $ResourceGroupName"
+
         $null = New-AzResourceGroup `
                 -Name     $ResourceGroupName `
                 -Location $Location `
