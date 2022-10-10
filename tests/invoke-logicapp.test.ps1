@@ -1,7 +1,9 @@
 ﻿
 $url = "https://prod-25.eastus.logic.azure.com:443/workflows/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-$templates = "GROUP", "STS", "SITEPAGEPUBLISHING", "TEAMCHANNEL" | ForEach-Object {
+$webtemplates = "GROUP", "STS", "SITEPAGEPUBLISHING", "TEAMCHANNEL"
+
+$templates = $webtemplates | ForEach-Object {
 
     $template = $_
 
