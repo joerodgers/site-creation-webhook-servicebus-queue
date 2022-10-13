@@ -38,7 +38,7 @@ Import-Module -Name "$PSScriptRoot\resources.psm1" -Force -ErrorAction Stop
 
 # read in email templates
 
-    $parameters.EmailBody = Get-Content -Path $EmailTemplatePath -Raw
+    $parameters.EmailBody = (Get-Content -Path $EmailTemplatePath -Raw).psobject.BaseObject
 
 New-ParameterFile `
     -OutputPath  "$PSScriptRoot\..\main.parameters.$Environment.json" `
