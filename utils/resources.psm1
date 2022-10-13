@@ -55,36 +55,6 @@ function Show-OAuthWindow
     }
 }
 
-<#
-function Format-Json 
-{
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [String]
-        $json
-    ) 
-
-    $indent = 0;
-    $result = ($json -Split '\n' | ForEach-Object {
-            if ($_ -match '[\}\]]') {
-                # This line contains ] or }, decrement the indentation level
-                $indent--
-            }
-            $line = (' ' * $indent * 2) + $_.TrimStart().Replace(': ', ': ')
-            if ($_ -match '[\{\[]') {
-                # This line contains [ or {, increment the indentation level
-                $indent++
-            }
-            $line
-        }) -Join "`n"
-    
-    # Unescape Html characters (<>&')
-    $result.Replace('\u0027', "'").Replace('\u003c', "<").Replace('\u003e', ">").Replace('\u0026', "&")
-}
-#>
-
 function New-ParameterFile 
 {
     [CmdletBinding()]
@@ -106,14 +76,13 @@ function New-ParameterFile
         [parameter(Mandatory=$false)]
         [switch] 
         $Force
-
     )
     begin
     {
         $parameterObject =  [PSCustomObject] @{
             '$schema'      = "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#"
             contentVersion = "1.0.0.0"
-            parameters     = $null
+            parameters     = @()
         }
     }
     process
@@ -122,7 +91,6 @@ function New-ParameterFile
         {
             $parameterObject.parameters += @{ $parameter.Key = @{ value = $parameter.Value } }
         }
-        
        
         if( (Test-Path -Path $OutputPath -PathType Leaf) -and -not $Force.IsPresent )
         {
@@ -130,7 +98,7 @@ function New-ParameterFile
             return
         }
 
-        $parameterObject | ConvertTo-Json -Depth 10 | Out-String | Set-Content -Path $OutputPath
+        $parameterObject | ConvertTo-Json | Out-String | Set-Content -Path $OutputPath
     }
     end
     {
@@ -157,7 +125,7 @@ function Set-DefaultParameterFileValue
     process
     {
         # read in the template and convert to an object
-        $parameters = Get-Content -Path $Path -Raw -ErrorAction Stop | ConvertFrom-Json
+        $parameters = (Get-Content -Path $Path -Raw -ErrorAction Stop).psobject.BaseObject | ConvertFrom-Json
         
         $members = $parameters.parameters.psobject.members | Where-Object -Property "MemberType" -eq "NoteProperty"
 
@@ -173,7 +141,7 @@ function Set-DefaultParameterFileValue
             }
         }
 
-        $parameters | ConvertTo-Json -Depth 10 | Out-String | Set-Content -Path $Path
+        $parameters | ConvertTo-Json | Out-String | Set-Content -Path $Path
     }
     end
     {
